@@ -12,8 +12,7 @@ QuestionCard
 ├── QuestionStem (TipTapRenderer + KaTeX)
 │     └─ отображает текст вопроса с формулами
 ├── AnswerOptions
-│     ├─ AnswerOption (radio/button)
-│     └─ локальное состояние selectedAnswer
+│     └─ AnswerOption (radio/button) отображает ответы и выбор ответа
 ├── ActionBar
 │     ├─ CheckAnswerButton
 │     └─ Disabled если !selectedAnswer или уже checked
@@ -23,7 +22,11 @@ QuestionCard
       └─ скрывает explanation и показывает CTA на оплату
 
 ## State management:
-- **selectedAnswer** — локально в AnswerOptions
+- **selectedAnswer** — локально в QuestionCard, передаётся в AnswerOptions как controlled state
+Почему? 
+1) проще сбрасывать state при смене questionId
+2) вся логика вопроса в одном месте
+
 - **isChecked** — в QuestionCard, влияет на отображение Explanation и блокировку кнопки Check
 - **questionId** — глобально или через props; при смене вопроса сбрасывает selectedAnswer и isChecked
 
@@ -34,9 +37,10 @@ QuestionCard
 ```
 // state в QuestionCard
 state:
-  selectedAnswer = null
+  selectedAnswer = null   // id выбранного ответа
   isChecked = false
   isChecking = false   // защита от быстрых кликов
+  isCorrect = null   // true/false после проверки
   showExplanation = false
 
 // derived
@@ -60,8 +64,11 @@ onCheckAnswer():
 
   call checkAnswerAPI(selectedAnswer)
     .then(result):
-      isChecked = true
+      isCorrect = result.isCorrect // для визуальной подсветки
       showExplanation = true
+    .catch():
+      showError("Не удалось проверить ответ, попробуйте ещё раз")
+      isChecked = false
     .finally():
       isChecking = false
 ```
@@ -116,12 +123,12 @@ render():
 3. *В stem очень длинный текст*
 - контент скроллится внутри QuestionStem
 - максимальная высота ограничена (чтобы кнопки всегда были видны)
-- текст не выносит ActionBar за пределы экрана
+- текст не выносит ActionBar за пределы экрана (position: sticky/fixed)
 
 4. **KaTeX упал с ошибкой**
 - ошибка *ловится внутри* QuestionStem
 - показывается *fallback*: «Не удалось отобразить формулу»
-- остальной UI (ответы, check) *остаётся рабочим*
+- остальной UI (ответы, check) *остаётся рабочим*, пользователь может повторно нажать check
 
 5. **Пользователь меняет ответ после check**
 - AnswerOptions становятся *disabled*
@@ -132,5 +139,6 @@ render():
 Explanation скрыт/заблюрен, тогда: 
 - показывается текст: «Объяснение доступно в полной версии»
 - явный CTA: кнопка «Открыть полный доступ»
-Результат: пользователь понимает, почему контент недоступен и что нужно сделать, чтобы получить доступ
-
+- при клике на СТА, после оплаты пользователь возвращается к Explanation
+Результат: пользователь понимает, почему контент недоступен и что нужно сделать, чтобы получить доступ, сразу видит результат выполненных условий
+* В demo-режиме можно показывать правильный ответ без explanation для мотивации.
