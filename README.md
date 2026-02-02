@@ -1,0 +1,136 @@
+# QuestionCard
+
+## Контекст
+Контент вопроса приходит как JSON (TipTap), формулы через KaTeX.
+Пользователь кликает быстро, API иногда косячит.
+
+## Часть 1. Архитектура
+
+### Структура QuestionCard
+
+QuestionCard
+├── QuestionStem (TipTapRenderer + KaTeX)
+│     └─ отображает текст вопроса с формулами
+├── AnswerOptions
+│     ├─ AnswerOption (radio/button)
+│     └─ локальное состояние selectedAnswer
+├── ActionBar
+│     ├─ CheckAnswerButton
+│     └─ Disabled если !selectedAnswer или уже checked
+├── Explanation (conditional)
+│     └─ показывается только после check
+└── DemoOverlay (conditional)
+      └─ скрывает explanation и показывает CTA на оплату
+
+## State management:
+- **selectedAnswer** — локально в AnswerOptions
+- **isChecked** — в QuestionCard, влияет на отображение Explanation и блокировку кнопки Check
+- **questionId** — глобально или через props; при смене вопроса сбрасывает selectedAnswer и isChecked
+
+**Быстрые клики** — нужно блокировать CheckAnswer **до** завершения API call (если есть), иначе состояние не ломается.
+
+
+## Часть 2. Псевдокод логики: 
+```
+// state в QuestionCard
+state:
+  selectedAnswer = null
+  isChecked = false
+  isChecking = false   // защита от быстрых кликов
+  showExplanation = false
+
+// derived
+isCheckDisabled = !selectedAnswer || isChecked || isChecking
+```
+
+**Выбор ответа: **
+```
+onSelectAnswer(answerId):
+  if (isChecked) return   // после check нельзя менять ответ
+  selectedAnswer = answerId
+
+```
+
+**Проверка ответа: **
+```
+onCheckAnswer():
+  if (!selectedAnswer || isChecked) return
+
+  isChecking = true
+
+  call checkAnswerAPI(selectedAnswer)
+    .then(result):
+      isChecked = true
+      showExplanation = true
+    .finally():
+      isChecking = false
+```
+
+**Смена вопроса**
+```
+onQuestionChange(questionId):
+  resetState()
+
+resetState():
+  selectedAnswer = null
+  isChecked = false
+  isChecking = false
+  showExplanation = false
+```
+
+**Рендеринг**
+```
+render():
+  render QuestionStem
+
+  render AnswerOptions
+    disabled = isChecked
+
+  render CheckAnswerButton
+    disabled = isCheckDisabled
+    loading = isChecking
+
+  if (isChecked):
+    render Explanation
+```
+
+### Особенности: 
+- explanation никогда не показывается до check;
+- состояние обязательно сбрасывается при смене questionId;
+- быстрые клики не ломают UI из-за isChecking;
+- после check пользователь не может менять ответ;
+- disabled состояния вычисляются явно, а не «магией».
+
+
+## Часть 3. Edge cases и UX
+1. **explanation отсутствует**
+- после check показывается *fallback*: «Объяснение к этому вопросу пока недоступно»
+- UI не ломается, пустых блоков нет
+- кнопка Check работает *как обычно*
+
+2. **В stem только формулы (KaTeX)**
+- контейнер QuestionStem имеет **минимальную высоту**
+- формулы центрируются **по вертикали**
+- **Нет лишних отступов**, чтобы карточка не выглядела «пустой»
+
+3. *В stem очень длинный текст*
+- контент скроллится внутри QuestionStem
+- максимальная высота ограничена (чтобы кнопки всегда были видны)
+- текст не выносит ActionBar за пределы экрана
+
+4. **KaTeX упал с ошибкой**
+- ошибка *ловится внутри* QuestionStem
+- показывается *fallback*: «Не удалось отобразить формулу»
+- остальной UI (ответы, check) *остаётся рабочим*
+
+5. **Пользователь меняет ответ после check**
+- AnswerOptions становятся *disabled*
+- визуально показывается *выбранный* ответ
+- *нет пересчёта* результата, состояние остаётся стабильным
+
+6. **Пользователь в demo-режиме**
+Explanation скрыт/заблюрен, тогда: 
+- показывается текст: «Объяснение доступно в полной версии»
+- явный CTA: кнопка «Открыть полный доступ»
+Результат: пользователь понимает, почему контент недоступен и что нужно сделать, чтобы получить доступ
+
