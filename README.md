@@ -1,45 +1,50 @@
 # QuestionCard
 
 ## Контекст
-Контент вопроса приходит как JSON (TipTap), формулы через KaTeX.
+Контент вопроса приходит как JSON (TipTap), формулы через KaTeX.  
 Пользователь кликает быстро, API иногда косячит.
 
 ## Часть 1. Архитектура
 
 ### Структура QuestionCard
 
-QuestionCard
-├── QuestionStem (TipTapRenderer + KaTeX)
-│     └─ отображает текст вопроса с формулами
-├── AnswerOptions
-│     └─ AnswerOption (radio/button) отображает ответы и выбор ответа
-├── ActionBar
-│     ├─ CheckAnswerButton
-│     └─ Disabled если !selectedAnswer или уже checked
-├── Explanation (conditional)
-│     └─ показывается только после check
-└── DemoOverlay (conditional)
-      └─ скрывает explanation и показывает CTA на оплату
+QuestionCard  
+├── QuestionStem (TipTapRenderer + KaTeX)  
+│     └─ отображает текст вопроса с формулами  
+├── AnswerOptions  
+│     └─ AnswerOption (radio/button) отображает ответы и выбор ответа  
+├── ActionBar  
+│     ├─ CheckAnswerButton  
+│     └─ Disabled если !selectedAnswer или уже checked  
+├── Explanation (conditional)  
+│     └─ показывается только после check  
+└── DemoOverlay (conditional)  
+      └─ скрывает explanation и показывает CTA на оплату  
 
 ## State management:
-- **selectedAnswer** — локально в QuestionCard, передаётся в AnswerOptions как controlled state
-Почему? 
-1) проще сбрасывать state при смене questionId
-2) вся логика вопроса в одном месте
+1) **selectedAnswer** - хранится локально в QuestionCard, передаётся в AnswerOptions как controlled state   
+- проще сбрасывать state при смене questionId
+- вся логика вопроса в одном месте
 
-- **isChecked** — в QuestionCard, влияет на отображение Explanation и блокировку кнопки Check
-- **questionId** — глобально или через props; при смене вопроса сбрасывает selectedAnswer и isChecked
+2) **isChecked** - в QuestionCard, влияет на отображение Explanation и блокировку кнопки Check
+3) **questionId** - передается через props;  
+При смене вопроса сбрасывает **selectedAnswer** и **isChecked**  
 
-**Быстрые клики** — нужно блокировать CheckAnswer **до** завершения API call (если есть), иначе состояние не ломается.
+4) **isChecking** — защищает от быстрых кликов, используется для loading-состояния кнопки
+**Быстрые клики** - нужно блокировать CheckAnswerButton **до** завершения API call (если есть), иначе состояние не ломается.
+5) **isCorrect** — результат проверки, нужен для визуальной обратной связи
+6) **showExplanation** — управляет показом explanation после check
 
 
 ## Часть 2. Псевдокод логики: 
+**Состояние в QuestionCard**
 ```
-// state в QuestionCard
+// questionId приходит через props и не хранится в локальном state
+
 state:
   selectedAnswer = null   // id выбранного ответа
   isChecked = false
-  isChecking = false   // защита от быстрых кликов
+  isChecking = false  // защита от быстрых кликов
   isCorrect = null   // true/false после проверки
   showExplanation = false
 
@@ -47,7 +52,7 @@ state:
 isCheckDisabled = !selectedAnswer || isChecked || isChecking
 ```
 
-**Выбор ответа: **
+**Выбор ответа:**
 ```
 onSelectAnswer(answerId):
   if (isChecked) return   // после check нельзя менять ответ
@@ -55,7 +60,7 @@ onSelectAnswer(answerId):
 
 ```
 
-**Проверка ответа: **
+**Проверка ответа:**
 ```
 onCheckAnswer():
   if (!selectedAnswer || isChecked) return
@@ -65,6 +70,7 @@ onCheckAnswer():
   call checkAnswerAPI(selectedAnswer)
     .then(result):
       isCorrect = result.isCorrect // для визуальной подсветки
+      isChecked = true
       showExplanation = true
     .catch():
       showError("Не удалось проверить ответ, попробуйте ещё раз")
@@ -140,5 +146,5 @@ Explanation скрыт/заблюрен, тогда:
 - показывается текст: «Объяснение доступно в полной версии»
 - явный CTA: кнопка «Открыть полный доступ»
 - при клике на СТА, после оплаты пользователь возвращается к Explanation
-Результат: пользователь понимает, почему контент недоступен и что нужно сделать, чтобы получить доступ, сразу видит результат выполненных условий
+Результат: пользователь понимает, почему контент недоступен и что нужно сделать, чтобы получить доступ, сразу видит результат выполненных условий  
 * В demo-режиме можно показывать правильный ответ без explanation для мотивации.
